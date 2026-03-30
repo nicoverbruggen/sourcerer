@@ -59,7 +59,7 @@ DEFAULT_FAMILY = "Sourcerer"  # default if --customize not used
 
 OPTICAL_SIZE = 20       # opsz axis: 8 (caption) → 20 (text) → 60 (display)
 GLYPH_XSCALE = 100     # horizontal glyph scaling (100 = no change)
-GLYPH_YSCALE = 96     # vertical glyph scaling   (100 = no change)
+GLYPH_YSCALE = 100     # vertical glyph scaling   (100 = no change)
 
 VARIANT_STYLES = [
     # (style_suffix, source_vf, wght)
