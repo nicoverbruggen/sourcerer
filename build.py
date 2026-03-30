@@ -930,7 +930,7 @@ def _build(tmp_dir, family=DEFAULT_FAMILY, outline_fix=True):
             clean_ttf_degenerate_contours(ttf_path)
         fix_ttf_style_flags(ttf_path, style_suffix)
         fix_e_ink_trap(ttf_path)
-        # autohint_ttf(ttf_path)
+        autohint_ttf(ttf_path)
 
 
     # Step 5: Generate Kobo (KF) variants via kobofix.py
