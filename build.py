@@ -566,6 +566,108 @@ def fix_ttf_style_flags(ttf_path, style_suffix):
     print(f"  Normalized style flags for {style_suffix}")
 
 
+def fix_e_ink_trap(ttf_path):
+    """Remove the ink trap notch on the 'e' glyph's inner counter.
+
+    Source Serif 4 has an ink trap where the crossbar meets the right
+    side of the bowl — a small concave notch designed for small printed
+    text.  On e-readers this serves no purpose and looks odd.
+
+    Detection: in the inner counter contour, find the pattern
+      on A → on B (horizontal) → off C → off D → on E
+    where B is the right end of the crossbar and E is the bowl's right
+    side above.  Fix: extend B rightward to E.x and drop C/D.
+    """
+    from fontTools.ttLib import TTFont
+    from fontTools.ttLib.tables._g_l_y_f import GlyphCoordinates
+
+    font = TTFont(ttf_path)
+    glyf = font["glyf"]
+    cmap = font.getBestCmap()
+
+    e_name = cmap.get(ord('e'))
+    if not e_name:
+        font.close()
+        return
+
+    g = glyf[e_name]
+    if not g.numberOfContours or g.numberOfContours < 2:
+        font.close()
+        return
+
+    coords = list(g.coordinates)
+    flag_list = list(g.flags)
+    ends = list(g.endPtsOfContours)
+
+    modified = False
+    new_coords = []
+    new_flags = []
+    new_ends = []
+
+    prev_end = -1
+    for ci, end_pt in enumerate(ends):
+        start = prev_end + 1
+        c_coords = [(coords[j][0], coords[j][1]) for j in range(start, end_pt + 1)]
+        c_flags = [flag_list[j] for j in range(start, end_pt + 1)]
+        n = len(c_coords)
+
+        to_remove = set()
+        to_adjust = {}
+
+        for j in range(n - 4):
+            af, bf = c_flags[j] & 1, c_flags[j+1] & 1
+            cf, df = c_flags[j+2] & 1, c_flags[j+3] & 1
+            ef = c_flags[j+4] & 1
+
+            # Pattern: on, on (horizontal), off, off, on
+            if not (af and bf and not cf and not df and ef):
+                continue
+
+            a, b, e = c_coords[j], c_coords[j+1], c_coords[j+4]
+
+            # Horizontal segment (same y)
+            if abs(a[1] - b[1]) > 5:
+                continue
+            # B is the rightmost point of the crossbar
+            if a[0] >= b[0]:
+                continue
+            # E is to the right of and above B (bowl curving up)
+            if e[0] <= b[0] or e[1] <= b[1]:
+                continue
+            # Gap should be meaningful (ink trap) but not huge
+            if not (10 < e[0] - b[0] < 100):
+                continue
+
+            # Fix: extend B to E.x, remove the two off-curve points
+            to_adjust[j+1] = (e[0], b[1])
+            to_remove.add(j+2)
+            to_remove.add(j+3)
+            modified = True
+            break
+
+        for j in range(n):
+            if j in to_remove:
+                continue
+            new_coords.append(to_adjust[j] if j in to_adjust else c_coords[j])
+            new_flags.append(c_flags[j])
+
+        new_ends.append(len(new_coords) - 1)
+        prev_end = end_pt
+
+    if modified:
+        g.coordinates = GlyphCoordinates(new_coords)
+        g.flags = new_flags
+        g.endPtsOfContours = new_ends
+        g.numberOfContours = len(new_ends)
+        glyph_set = font.getGlyphSet()
+        if hasattr(g, "recalcBounds"):
+            g.recalcBounds(glyph_set)
+        font.save(ttf_path)
+        print(f"  Fixed ink trap on 'e'")
+
+    font.close()
+
+
 def autohint_ttf(ttf_path):
     """Run ttfautohint to add proper TrueType hinting.
 
@@ -792,6 +894,7 @@ def _build(tmp_dir, family=DEFAULT_FAMILY, outline_fix=True):
         if outline_fix:
             clean_ttf_degenerate_contours(ttf_path)
         fix_ttf_style_flags(ttf_path, style_suffix)
+        fix_e_ink_trap(ttf_path)
         # autohint_ttf(ttf_path)
 
 
