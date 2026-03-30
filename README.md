@@ -2,6 +2,8 @@
 
 **Sourcerer** is a modified font based on [Source Serif 4](https://github.com/adobe-fonts/source-serif), optimized for e-readers.
 
+<kbd><img src="./screenshot.png" width='400px'/></kbd>
+
 The original Source Serif 4 variable font is located in `src` and is available under the same OFL as the end result, which is included in `LICENSE`.
 
 ## Downloads
