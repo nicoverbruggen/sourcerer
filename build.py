@@ -6,9 +6,11 @@ Orchestrates the full font build pipeline:
 
   1. Instances variable fonts into static TTFs (fontTools.instancer)
   2. Applies outline fixes via FontForge (overlap removal)
-  3. Applies vertical metrics, line height, rename (metrics.py, lineheight.py, rename.py)
-  4. Exports to TTF → ./out/ttf/
-  5. Post-processes TTFs: style flags, autohinting
+  3. Scales glyphs (if GLYPH_XSCALE/YSCALE ≠ 100%)
+  4. Applies vertical metrics, line height, rename
+  5. Exports to TTF → ./out/ttf/
+  6. Post-processes TTFs: style flags, modify lowercase e
+  7. Generates Kobo (KF) variants via kobofix.py
 
 Uses FontForge (detected automatically).
 Run with: python3 build.py
@@ -30,7 +32,9 @@ import textwrap
 # Quick reference (what each knob does):
 # - REGULAR_VF / ITALIC_VF: input variable fonts from ./src
 # - DEFAULT_FAMILY: default output family name
-# - VARIANT_STYLES: (style, source VF, wght, opsz) pins for instancing
+# - VARIANT_STYLES: (style, source VF, wght) per-style instancing
+# - OPTICAL_SIZE: opsz axis value (shared across all styles)
+# - GLYPH_XSCALE / GLYPH_YSCALE: post-instance glyph scaling (%)
 # - LINE_HEIGHT: Typo line height (default line spacing)
 # - SELECTION_HEIGHT: Win/hhea selection box height and clipping
 # - ASCENDER_RATIO: ascender share of total height
@@ -53,12 +57,16 @@ with open(os.path.join(ROOT_DIR, "COPYRIGHT")) as _cf:
 
 DEFAULT_FAMILY = "Sourcerer"  # default if --customize not used
 
+OPTICAL_SIZE = 20       # opsz axis: 8 (caption) → 20 (text) → 60 (display)
+GLYPH_XSCALE = 100     # horizontal glyph scaling (100 = no change)
+GLYPH_YSCALE = 96     # vertical glyph scaling   (100 = no change)
+
 VARIANT_STYLES = [
-    # (style_suffix, source_vf, wght, opsz)
-    ("Regular",    REGULAR_VF, 450, 16),
-    ("Bold",       REGULAR_VF, 700, 16),
-    ("Italic",     ITALIC_VF,  450, 16),
-    ("BoldItalic", ITALIC_VF,  700, 16),
+    # (style_suffix, source_vf, wght)
+    ("Regular",    REGULAR_VF, 450),
+    ("Bold",       REGULAR_VF, 700),
+    ("Italic",     ITALIC_VF,  450),
+    ("BoldItalic", ITALIC_VF,  700),
 ]
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -70,15 +78,15 @@ VARIANT_STYLES = [
 # - SELECTION_HEIGHT drives Win/hhea metrics (selection box + clipping)
 # - ASCENDER_RATIO splits the total height between ascender/descender
 LINE_HEIGHT = 1.0
-SELECTION_HEIGHT = 1.3
+SELECTION_HEIGHT = 1.0
 ASCENDER_RATIO = 0.8
 
 # ttfautohint options (hinting for Kobo's FreeType renderer)
 AUTOHINT_OPTS = [
     "--no-info",
     "--stem-width-mode=nss",
-    "--increase-x-height=0",
-    '--x-height-snapping-exceptions=-',
+    # "--increase-x-height=0",
+    # '--x-height-snapping-exceptions=-',
 ]
 
 # Naming and style metadata (used by the rename step)
@@ -195,6 +203,27 @@ def ff_remove_overlaps_script():
 
         count = sum(1 for g in f.glyphs() if g.isWorthOutputting())
         print(f"  Removed overlaps and corrected direction for {count} glyphs")
+    """)
+
+
+def ff_scale_glyphs_script():
+    """FontForge script: scale all glyphs horizontally and/or vertically."""
+    return textwrap.dedent(f"""\
+        import psMat
+
+        xscale = {GLYPH_XSCALE} / 100.0
+        yscale = {GLYPH_YSCALE} / 100.0
+
+        mat = psMat.scale(xscale, yscale)
+        count = 0
+        for g in f.glyphs():
+            if not g.isWorthOutputting():
+                continue
+            g.transform(mat)
+            g.width = int(round(g.width * xscale))
+            count += 1
+
+        print(f"  Scaled {{count}} glyphs (x={{xscale:.2f}}, y={{yscale:.2f}})")
     """)
 
 
@@ -787,8 +816,10 @@ def main():
         outline_fix = outline_input not in ("n", "no")
 
     print()
-    print(f"  Family:    {family}")
+    print(f"  Family:      {family}")
     print(f"  Outline fix: {'yes' if outline_fix else 'no'}")
+    print(f"  Optical size: {OPTICAL_SIZE}")
+    print(f"  Glyph scale: {GLYPH_XSCALE}% x {GLYPH_YSCALE}%")
     print()
 
     tmp_dir = os.path.join(ROOT_DIR, "tmp")
@@ -803,22 +834,22 @@ def main():
 
 
 def _build(tmp_dir, family=DEFAULT_FAMILY, outline_fix=True):
-    variants = [(f"{family}-{style}", vf, wght, opsz)
-                for style, vf, wght, opsz in VARIANT_STYLES]
-    variant_names = [name for name, _, _, _ in variants]
+    variants = [(f"{family}-{style}", vf, wght)
+                for style, vf, wght in VARIANT_STYLES]
+    variant_names = [name for name, _, _ in variants]
 
     # Step 1: Instance variable fonts into static TTFs
     print("\n── Step 1: Instance variable fonts ──\n")
 
-    for name, vf_path, wght, opsz in variants:
+    for name, vf_path, wght in variants:
         ttf_out = os.path.join(tmp_dir, f"{name}.ttf")
-        print(f"  Instancing {name} (wght={wght}, opsz={opsz})")
+        print(f"  Instancing {name} (wght={wght}, opsz={OPTICAL_SIZE})")
 
         cmd = [
             sys.executable, "-m", "fontTools.varLib.instancer",
             vf_path,
             f"wght={wght}",
-            f"opsz={opsz}",
+            f"opsz={OPTICAL_SIZE}",
             "-o", ttf_out,
         ]
         result = subprocess.run(cmd, capture_output=True, text=True)
@@ -837,6 +868,8 @@ def _build(tmp_dir, family=DEFAULT_FAMILY, outline_fix=True):
     print("\n── Step 2: Outline fixes ──\n")
 
     overlap_code = ff_remove_overlaps_script()
+    needs_scaling = GLYPH_XSCALE != 100 or GLYPH_YSCALE != 100
+    scale_code = ff_scale_glyphs_script() if needs_scaling else None
 
     for name in variant_names:
         ttf_path = os.path.join(tmp_dir, f"{name}.ttf")
@@ -846,6 +879,8 @@ def _build(tmp_dir, family=DEFAULT_FAMILY, outline_fix=True):
         steps = []
         if outline_fix:
             steps.append(("Removing overlaps", overlap_code))
+        if scale_code:
+            steps.append(("Scaling glyphs", scale_code))
         script = build_per_font_script(ttf_path, sfd_path, steps)
         run_fontforge_script(script)
 

@@ -85,4 +85,4 @@ To customize the font family name or disable outline fixes:
 python3 build.py --customize
 ```
 
-The build script (`build.py`) uses `fontTools` and FontForge to transform the Source Serif 4 variable fonts into Sourcerer. After export, it post-processes the TTFs: normalizing style flags and autohinting with `ttfautohint` for Kobo's FreeType renderer. Configuration and step-by-step details live in the header comments of `build.py`.
+The build script (`build.py`) uses `fontTools` and FontForge to transform the Source Serif 4 variable fonts into Sourcerer. After export, it post-processes the TTFs: normalizing style flags and modifying the lowercase `e` glyph. Configuration and step-by-step details live in the header comments of `build.py`.
