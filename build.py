@@ -69,6 +69,8 @@ VARIANT_STYLES = [
     ("BoldItalic", ITALIC_VF,  700),
 ]
 
+KOBOFIX_URL = "https://raw.githubusercontent.com/nicoverbruggen/kobo-font-fix/v0.6/kobofix.py"
+
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 # INLINE FONTFORGE SCRIPT CONFIG
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -746,12 +748,6 @@ def check_ttfautohint():
         file=sys.stderr,
     )
     sys.exit(1)
-
-
-KOBOFIX_URL = (
-    "https://raw.githubusercontent.com/nicoverbruggen/kobo-font-fix/v0.5.3/kobofix.py"
-)
-
 
 def _download_kobofix(dest):
     """Download kobofix.py if not already cached."""
