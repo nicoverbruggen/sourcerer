@@ -597,6 +597,30 @@ def fix_ttf_style_flags(ttf_path, style_suffix):
     print(f"  Normalized style flags for {style_suffix}")
 
 
+def fix_ttf_version_names(ttf_path):
+    """Keep head.fontRevision and name ID 5 in sync with VERSION.
+
+    FontForge's appendSFNTName only adds a Version record when one is
+    absent, so stale version strings from the source fonts survive.
+    Force-overwrite name ID 5 (Mac + Windows) and head.fontRevision.
+    """
+    try:
+        from fontTools.ttLib import TTFont
+    except Exception:
+        print("  [warn] Skipping version name fix: fontTools not available", file=sys.stderr)
+        return
+
+    font = TTFont(ttf_path)
+    version_string = f"Version {FONT_VERSION}"
+    font["head"].fontRevision = float(FONT_VERSION)
+    name_table = font["name"]
+    name_table.setName(version_string, 5, 1, 0, 0)
+    name_table.setName(version_string, 5, 3, 1, 0x409)
+    font.save(ttf_path)
+    font.close()
+    print(f"  Normalized version names to {version_string}")
+
+
 def fix_e_ink_trap(ttf_path):
     """Remove the ink trap notch on the 'e' glyph's inner counter.
 
@@ -925,6 +949,7 @@ def _build(tmp_dir, family=DEFAULT_FAMILY, outline_fix=True):
         if outline_fix:
             clean_ttf_degenerate_contours(ttf_path)
         fix_ttf_style_flags(ttf_path, style_suffix)
+        fix_ttf_version_names(ttf_path)
         fix_e_ink_trap(ttf_path)
         autohint_ttf(ttf_path)
 
